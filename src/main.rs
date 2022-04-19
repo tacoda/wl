@@ -1,13 +1,23 @@
-use std::{env, process};
+use std;
 use structopt::StructOpt;
+use exitcode;
 use whois_rust::{WhoIs, WhoIsError, WhoIsLookupOptions};
 
-#[derive(StructOpt, Debug)]
-#[structopt(name = "wl", about = "WhoIs Lookup")]
+#[derive(StructOpt)]
+#[structopt(name = "wl", about = "WhoIs Lookup Tool")]
 struct Cli {
     /// Host or IP address to lookup
     #[structopt(name = "HOST")]
     host: String,
+}
+
+fn code(error: WhoIsError) -> i32 {
+    match error {
+        WhoIsError::SerdeJsonError(_) => exitcode::CONFIG,
+        WhoIsError::IOError(_) => exitcode::IOERR,
+        WhoIsError::HostError(_) => exitcode::CONFIG,
+        _ => exitcode::USAGE,
+    }
 }
 
 fn whois() -> Result<WhoIs, WhoIsError> {
@@ -24,10 +34,21 @@ fn whois() -> Result<WhoIs, WhoIsError> {
     WhoIs::from_string(json)
 }
 
-fn main() {
+fn run_app() -> Result<String, WhoIsError> {
     let cli = Cli::from_args();
     let whois = whois().unwrap();
-    let result = whois.lookup(WhoIsLookupOptions::from_string(cli.host).unwrap()).unwrap();
-    println!("{}", result);
-    process::exit(0);
+    whois.lookup(WhoIsLookupOptions::from_string(cli.host).unwrap())
+}
+
+fn main() {
+    std::process::exit(match run_app() {
+        Ok(result) => {
+            println!("{}", result);
+            exitcode::OK
+        },
+        Err(err) => {
+            eprintln!("error: {}", err);
+            code(err)
+        }
+    });
 }
